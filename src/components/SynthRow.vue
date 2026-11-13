@@ -132,6 +132,7 @@ function onContext(d, i) {
     @pointerdown="ui.selectedId = track.id"
   >
     <div class="flex flex-col gap-1.5">
+      <div v-if="track.name" class="text-xs font-bold uppercase tracking-wider text-sky-300">{{ track.name }}</div>
       <div class="flex items-center gap-1.5">
         <select v-model="track.sound" class="w-[5.5rem] rounded border border-zinc-700 bg-zinc-900 px-1.5 py-1 text-sm font-semibold text-sky-300" aria-label="Waveform">
           <option v-for="w in WAVES" :key="w" :value="w">{{ w }}</option>

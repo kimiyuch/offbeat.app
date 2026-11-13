@@ -47,7 +47,10 @@ const GROUPS = {
 const type = computed(() => trackType(props.track));
 const groups = computed(() => GROUPS[type.value]);
 const title = computed(() =>
-  !props.track ? '—' : type.value === 'synth' ? `${props.track.sound} · ${props.track.root}${props.track.octave} ${props.track.mode.replace(':', ' ')}` : props.track.sound,
+  !props.track
+    ? '—'
+    : (props.track.name ? `${props.track.name} · ` : '') +
+      (type.value === 'synth' ? `${props.track.sound} · ${props.track.root}${props.track.octave} ${props.track.mode.replace(':', ' ')}` : props.track.sound),
 );
 </script>
 

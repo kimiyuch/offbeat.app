@@ -14,6 +14,11 @@ const playingPattern = computed(() =>
   !props.playing ? -1 : playingSlot.value >= 0 ? project.chain[playingSlot.value] : project.pattern,
 );
 
+const songLength = computed(() => {
+  const secs = Math.round((project.chain.length * 4 * 60) / project.bpm);
+  return `${project.chain.length} bars · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+});
+
 function onPaste() {
   if (patternHasNotes(project.pattern) && !confirm(`Overwrite pattern ${PATTERN_NAMES[project.pattern]}?`)) return;
   pastePattern();
@@ -24,7 +29,7 @@ function onClear() {
 </script>
 
 <template>
-  <section class="flex flex-col gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-3 lg:flex-row lg:items-center">
+  <section class="flex flex-col gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-3">
     <!-- pattern being edited -->
     <div class="flex flex-wrap items-center gap-2">
       <span class="text-[10px] uppercase tracking-wider text-zinc-400">Edit</span>
@@ -57,7 +62,7 @@ function onClear() {
     </div>
 
     <!-- song chain -->
-    <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2 lg:border-l lg:border-zinc-800 lg:pl-4">
+    <div class="flex min-w-0 flex-wrap items-center gap-2 border-t border-zinc-800 pt-3">
       <div class="flex rounded-md border border-zinc-700 p-0.5 text-xs font-semibold" role="radiogroup" aria-label="Playback mode">
         <button type="button" role="radio" :aria-checked="!project.song" class="rounded px-2 py-1" :class="!project.song ? 'bg-zinc-200 text-zinc-900' : 'text-zinc-400'" @click="project.song = false">Pattern</button>
         <button type="button" role="radio" :aria-checked="project.song" class="rounded px-2 py-1" :class="project.song ? 'bg-emerald-400 text-zinc-900' : 'text-zinc-400'" @click="project.song = true">Song</button>
@@ -66,7 +71,7 @@ function onClear() {
         <li v-for="(p, k) in project.chain" :key="k">
           <button
             type="button"
-            class="h-7 min-w-7 rounded border px-1.5 text-xs font-bold"
+            class="h-6 min-w-6 rounded border px-1 text-[11px] font-bold"
             :class="playingSlot === k ? 'border-emerald-300 bg-emerald-400 text-zinc-900' : 'border-zinc-600 bg-zinc-800 text-zinc-200 hover:border-red-400 hover:line-through'"
             :title="`Bar ${k + 1}: pattern ${PATTERN_NAMES[p]} — click to remove`"
             @click="chainRemove(k)"
@@ -74,6 +79,7 @@ function onClear() {
         </li>
         <li v-if="!project.chain.length" class="text-xs text-zinc-500">empty: add patterns →</li>
       </ol>
+      <span v-if="project.chain.length" class="text-[11px] tabular-nums text-zinc-500">{{ songLength }}</span>
       <div class="ml-auto flex items-center gap-1">
         <span class="text-[10px] uppercase tracking-wider text-zinc-500">add</span>
         <button

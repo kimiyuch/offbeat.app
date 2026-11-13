@@ -10,6 +10,7 @@ import { generateCode } from './engine/codegen.js';
 import { init, unlockAudio, evaluate, stop, onError, preloadSamples, hasSound, resumeAudio } from './engine/strudel.js';
 import { startPlayhead, stopPlayhead } from './engine/playhead.js';
 import { project, ui, addTrack, addSynth, SOUNDS, defaultProject, replaceProject } from './store/project.js';
+import { DEMOS } from './store/demos.js';
 
 const SOURCE_URL = import.meta.env.VITE_SOURCE_URL || 'https://github.com/kimiyuch/offbeat.app';
 
@@ -106,6 +107,15 @@ onBeforeUnmount(() => {
 function resetAll() {
   if (confirm('Reset to the default beat?')) replaceProject(defaultProject());
 }
+
+const demoId = ref('');
+function loadDemo() {
+  const demo = DEMOS.find((d) => d.id === demoId.value);
+  demoId.value = '';
+  if (!demo) return;
+  if (!confirm(`Load the demo "${demo.name}"? It replaces your current project (use Share link first to keep it).`)) return;
+  replaceProject(demo.build());
+}
 </script>
 
 <template>
@@ -114,7 +124,16 @@ function resetAll() {
       <h1 class="text-2xl font-black tracking-tight">off<span class="text-amber-400">beat</span></h1>
       <span class="hidden text-sm text-zinc-500 sm:inline">buttons and knobs in, Strudel code out</span>
       <span v-if="loadingSamples" class="text-xs text-zinc-400" role="status">loading samples {{ samples.done }}/{{ samples.total }}…</span>
-      <button type="button" class="ml-auto text-xs text-zinc-500 hover:text-zinc-300" @click="resetAll">reset</button>
+      <select
+        v-model="demoId"
+        class="ml-auto rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200"
+        aria-label="Load a demo song"
+        @change="loadDemo"
+      >
+        <option value="" disabled>♫ Demo songs…</option>
+        <option v-for="d in DEMOS" :key="d.id" :value="d.id">{{ d.name }}</option>
+      </select>
+      <button type="button" class="text-xs text-zinc-500 hover:text-zinc-300" @click="resetAll">reset</button>
     </header>
 
     <Transport :playing="playing" :loading="loading" @toggle="toggle" />

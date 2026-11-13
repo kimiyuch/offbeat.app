@@ -120,7 +120,7 @@ export function synthStepsToMini(steps, phase) {
 
 // --- patterns and song chain ---
 
-export const PATTERN_NAMES = ['A', 'B', 'C', 'D'];
+export const PATTERN_NAMES = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 
 // A track's patterns. Older/simple tracks only have `steps` (= pattern A).
 export const patternsOf = (track) => track.pats ?? [track.steps];

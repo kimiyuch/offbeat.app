@@ -124,3 +124,16 @@ A sound missing from a machine (e.g. `tr909_cb`) has no entry → flagged "silen
 ## Background tabs
 
 Safari suspends the AudioContext in background tabs; we `resume()` on `visibilitychange`.
+
+## Demo songs / limits
+
+- 8 patterns (A–H), chain up to 64 bars. Saved/shared JSON stores only hits
+  (`[i]`, `[i, alt]`, synth `[i, note, len, alt?]`); older full-step and pre-pattern
+  formats still load (`serialize.js` → `rawStep`).
+- Demos live in `src/store/demos.js` as readable data and load through `fromJSON`.
+- Harmony via alternation: a pattern played n times in a row alternates main/alt per
+  bar. When a section has an odd bar count (trance drop: F×1 then G×7), the following
+  pattern's notes are written with main/alt swapped so the progression stays in step.
+  `demos.test.js` checks Am|F on every bar of the whole song.
+- Known verbosity: in song mode an alternating pattern repeated n times is written out
+  slot by slot (no mini-notation shorthand keeps per-play alternation across `!n`).
