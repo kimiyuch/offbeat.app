@@ -111,7 +111,7 @@ function resetAll() {
 <template>
   <div class="mx-auto flex min-h-screen max-w-6xl flex-col gap-4 p-4 sm:p-6">
     <header class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-      <h1 class="text-2xl font-black tracking-tight">groove<span class="text-amber-400">box</span></h1>
+      <h1 class="text-2xl font-black tracking-tight">off<span class="text-amber-400">beat</span></h1>
       <span class="hidden text-sm text-zinc-500 sm:inline">buttons and knobs in, Strudel code out</span>
       <span v-if="loadingSamples" class="text-xs text-zinc-400" role="status">loading samples {{ samples.done }}/{{ samples.total }}…</span>
       <button type="button" class="ml-auto text-xs text-zinc-500 hover:text-zinc-300" @click="resetAll">reset</button>

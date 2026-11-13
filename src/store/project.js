@@ -16,7 +16,8 @@ export const NEW_PARAMS = {
   },
 };
 
-const STORAGE_KEY = 'groovebox:v1';
+const STORAGE_KEY = 'offbeat:v1';
+const LEGACY_STORAGE_KEY = 'groovebox:v1'; // read-only fallback from before the rename
 let nextId = 1;
 
 const NPATS = PATTERN_NAMES.length;
@@ -188,7 +189,7 @@ function fromHash() {
 }
 function fromStorage() {
   try {
-    const s = localStorage.getItem(STORAGE_KEY);
+    const s = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
     return s ? fromJSON(JSON.parse(s)) : null;
   } catch {
     return null;
@@ -273,11 +274,12 @@ export function chainRemove(k) {
 }
 
 // --- melodies: built-in presets + the user's own (localStorage only) ---
-const MELODY_KEY = 'groovebox:melodies';
+const MELODY_KEY = 'offbeat:melodies';
+const LEGACY_MELODY_KEY = 'groovebox:melodies';
 
 function loadUserMelodies() {
   try {
-    const raw = JSON.parse(localStorage.getItem(MELODY_KEY) ?? '[]');
+    const raw = JSON.parse(localStorage.getItem(MELODY_KEY) ?? localStorage.getItem(LEGACY_MELODY_KEY) ?? '[]');
     return Array.isArray(raw) ? raw.filter((m) => m && typeof m.name === 'string' && m.notes) : [];
   } catch {
     return [];
