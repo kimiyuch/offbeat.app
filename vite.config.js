@@ -5,6 +5,15 @@ import { fileURLToPath } from 'node:url';
 
 export default defineConfig({
   plugins: [vue(), tailwindcss()],
+  // Local dev runs behind Herd: `herd proxy offbeat.app http://127.0.0.1:4324 --secure`
+  // -> https://offbeat.app.test. Live reload goes through the proxy's port 443.
+  server: {
+    host: '127.0.0.1',
+    port: 4324,
+    strictPort: true,
+    allowedHosts: ['offbeat.app.test'],
+    hmr: { clientPort: 443 },
+  },
   test: {
     server: { deps: { inline: [/@strudel\//] } },
     alias: {
