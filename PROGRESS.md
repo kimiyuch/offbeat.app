@@ -39,10 +39,13 @@ npm run build   # static site in dist/
 Local URL: https://offbeat.app.test via `herd proxy offbeat.app http://127.0.0.1:4324 --secure`
 (only works while `npm run dev` runs).
 
-## Publishing (next)
+## Publishing
 
-- The site is fully static: `npm run build`, then serve `dist/` from the subdomain root.
-  No server code, no environment variables needed.
+Live at **https://offbeat.kimiyu.ch** (Hostpoint, web root `~/www/offbeat.kimiyu.ch/public`).
+Deploy with `./deploy.sh`: refuses uncommitted changes, runs the tests, builds from HEAD,
+rsyncs `dist/` into the web root (keeps a panel-managed `.htaccess`).
+
+- The site is fully static: no server code, no environment variables.
 - Serve it over **HTTPS**: AudioWorklet (used by Strudel, e.g. the `supersaw` synth) and
   the clipboard "Copy" buttons only work in a secure context.
 - Samples are fetched at runtime from `strudel.b-cdn.net` (Strudel's CDN); the site
