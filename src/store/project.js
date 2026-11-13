@@ -210,3 +210,49 @@ export function clearTrack(id) {
   const t = project.tracks.find((t) => t.id === id);
   t?.steps.forEach((s) => Object.assign(s, { on: false, alt: null }, 'len' in s ? { len: 1 } : {}));
 }
+
+// --- melodies: built-in presets + the user's own (localStorage only) ---
+const MELODY_KEY = 'groovebox:melodies';
+
+function loadUserMelodies() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(MELODY_KEY) ?? '[]');
+    return Array.isArray(raw) ? raw.filter((m) => m && typeof m.name === 'string' && m.notes) : [];
+  } catch {
+    return [];
+  }
+}
+export const userMelodies = reactive(loadUserMelodies());
+watch(userMelodies, () => {
+  try {
+    localStorage.setItem(MELODY_KEY, JSON.stringify(userMelodies));
+  } catch {
+    /* no storage: melodies last for this session only */
+  }
+});
+
+// Replaces the track's notes, sound, octave and knobs. Key and scale stay.
+export function applyMelody(track, m) {
+  track.steps = Array.from({ length: STEPS }, (_, i) => {
+    const n = m.notes[i];
+    return n ? { on: true, note: n[0], len: n[1] ?? 1, alt: n[2] ?? null } : { on: false, note: 0, len: 1, alt: null };
+  });
+  if (WAVES.includes(m.sound)) track.sound = m.sound;
+  if (Number.isInteger(m.octave)) track.octave = m.octave;
+  track.params = { ...NEW_PARAMS.synth, ...pickNumbers(m.params, 'synth') };
+}
+
+export function saveMelody(track, name) {
+  const notes = {};
+  track.steps.forEach((s, i) => {
+    if (s.on) notes[i] = [s.note, s.len, s.alt];
+  });
+  const m = { id: `u${Date.now()}`, name, kind: 'mine', sound: track.sound, octave: track.octave, params: { ...track.params }, notes };
+  userMelodies.push(m);
+  return m;
+}
+
+export function deleteMelody(id) {
+  const i = userMelodies.findIndex((m) => m.id === id);
+  if (i >= 0) userMelodies.splice(i, 1);
+}

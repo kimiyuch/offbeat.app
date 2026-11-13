@@ -2,7 +2,8 @@
 import { computed, ref } from 'vue';
 import { STEPS } from '../engine/codegen.js';
 import { SCALES, ROOTS, degreeLabel } from '../engine/scales.js';
-import { WAVES, ui, removeTrack, clearTrack } from '../store/project.js';
+import { WAVES, ui, removeTrack, clearTrack, userMelodies, applyMelody, saveMelody, deleteMelody } from '../store/project.js';
+import { MELODIES, KIND_LABELS } from '../store/presets.js';
 import { currentStep } from '../engine/playhead.js';
 
 const props = defineProps({ track: { type: Object, required: true } });
@@ -10,6 +11,31 @@ const props = defineProps({ track: { type: Object, required: true } });
 const ROWS = 15; // scale degrees 0..14 (two octaves of a 7-note scale)
 const degrees = Array.from({ length: ROWS }, (_, i) => ROWS - 1 - i); // top = highest
 const scaleLen = computed(() => (SCALES[props.track.mode] ?? SCALES.minor).length);
+// --- melody picker ---
+const melodyId = ref('');
+const groups = computed(() => {
+  const all = [...MELODIES, ...userMelodies];
+  return Object.keys(KIND_LABELS)
+    .map((kind) => ({ kind, label: KIND_LABELS[kind], items: all.filter((m) => m.kind === kind) }))
+    .filter((g) => g.items.length);
+});
+const selectedMelody = computed(() => [...MELODIES, ...userMelodies].find((m) => m.id === melodyId.value));
+function onPickMelody() {
+  if (selectedMelody.value) applyMelody(props.track, selectedMelody.value);
+}
+function onSave() {
+  if (!props.track.steps.some((s) => s.on)) return alert('Nothing to save: the piano roll is empty.');
+  const name = prompt('Name this melody:', `My melody ${userMelodies.length + 1}`)?.trim();
+  if (name) melodyId.value = saveMelody(props.track, name).id;
+}
+function onDelete() {
+  const m = selectedMelody.value;
+  if (m?.kind === 'mine' && confirm(`Delete "${m.name}"?`)) {
+    deleteMelody(m.id);
+    melodyId.value = '';
+  }
+}
+
 const label = (d) => degreeLabel(d, props.track.root, props.track.octave, props.track.mode);
 
 // Same rule as codegen.synthTokens: a note lasts `len` steps unless the next note cuts it.
@@ -121,6 +147,28 @@ function onContext(d, i) {
         <select v-model="track.mode" class="min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-900 px-1 py-0.5 text-xs" aria-label="Scale">
           <option v-for="(_, m) in SCALES" :key="m" :value="m">{{ m.replace(':', ' ') }}</option>
         </select>
+      </div>
+      <div class="flex items-center gap-1">
+        <select
+          v-model="melodyId"
+          class="min-w-0 flex-1 rounded border border-sky-800 bg-zinc-900 px-1 py-0.5 text-xs text-sky-200"
+          aria-label="Load a melody"
+          title="Load a melody (replaces notes, sound and knobs; keeps key and scale)"
+          @change="onPickMelody"
+        >
+          <option value="" disabled>♪ load melody…</option>
+          <optgroup v-for="g in groups" :key="g.kind" :label="g.label">
+            <option v-for="m in g.items" :key="m.id" :value="m.id">{{ m.name }}</option>
+          </optgroup>
+        </select>
+        <button type="button" class="h-6 rounded border border-zinc-700 px-1.5 text-xs text-zinc-300 hover:bg-zinc-700" title="Save these notes as a melody" @click="onSave">save</button>
+        <button
+          v-if="selectedMelody?.kind === 'mine'"
+          type="button"
+          class="h-6 rounded border border-zinc-700 px-1.5 text-xs text-zinc-400 hover:bg-red-900"
+          title="Delete this saved melody"
+          @click="onDelete"
+        >✕</button>
       </div>
       <div class="flex gap-1.5">
         <button type="button" class="h-7 flex-1 rounded border border-zinc-700 text-xs text-zinc-400 hover:bg-zinc-700" @click="clearTrack(track.id)">clear</button>
