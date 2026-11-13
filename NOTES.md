@@ -1,0 +1,80 @@
+# NOTES
+
+Verified against the published packages (`@strudel/web@1.3.0`, `@strudel/core@1.2.6`,
+`superdough@1.3.0`) and the strudel.cc REPL source (`website/src/repl/prebake.mjs` on
+codeberg.org/uzu/strudel), 2026-11-13. If this file and the plan disagree, this file wins.
+
+## 1. `@strudel/web` API
+
+- `initStrudel(options)` → Promise resolving to the REPL object (`repl.scheduler`, …).
+  - `options.prebake`: async fn run after the default prebake (module scope + synth sounds).
+  - Any other option is passed through to `repl()` — e.g. `onEvalError(err)`.
+  - It calls `initAudioOnFirstClick()` itself, and **creates the AudioContext immediately**
+    (suspended until a gesture). So it is fine to call `initStrudel()` on page load; we
+    additionally call `initAudio()` (re-exported from superdough) inside the Play click.
+    *Differs from the plan*, which says "init Strudel inside the first click handler" —
+    not needed, and doing so would delay sample-map loading until after the click.
+- `evaluate(code, autoplay = true)`: transpiles like the REPL (double-quoted strings are
+  mini-notation, `$:` lines are stacked) and starts playback. Errors do **not** throw; they
+  go to `onEvalError`.
+- `hush()` → `repl.stop()` (stops the clock, resets cycle to 0).
+
+## 2. Drum-machine banks
+
+`@strudel/web` loads **no samples** by default. The REPL's prebake does:
+
+```js
+samples('https://strudel.b-cdn.net/tidal-drum-machines.json',
+        'https://strudel.b-cdn.net/tidal-drum-machines/machines/', { prebake: true, tag: 'drum-machines' })
+aliasBank('https://strudel.b-cdn.net/tidal-drum-machines-alias.json')
+```
+
+- Sounds are registered as `<Machine>_<sound>`, e.g. `RolandTR909_bd`. `.bank("x")` turns
+  `s("bd")` into `x_bd`; lookup is lowercased.
+- The alias file maps `RolandTR909 → TR909`, `RolandTR808 → TR808`, `RolandTR707 → TR707`,
+  `RolandTR606`, `RolandTR505`, `AkaiLinn → Linn`, `LinnLM1 → LM1`, … so `.bank("tr909")` works.
+- `aliasBank` iterates the *already registered* sounds, so it must run **after** `samples()`
+  resolves (the REPL does it without awaiting, which is racy; we await).
+- TR909 has: bd cp cr hh ht lt mt oh rd rim sd (no cb). TR808 has cb, no rd.
+- Audio files are fetched lazily on first trigger → first hit of a new sound may be silent.
+
+## 3. Re-evaluating while playing
+
+`repl.evaluate` → `scheduler.setPattern(pat)` just swaps `this.pattern`; the clock keeps
+running. The next scheduler tick (~every 50 ms) queries the new pattern. So swaps are
+seamless and **not** quantised to the next cycle (that's fine for a step sequencer since
+both patterns share the same grid). `setcps(x)` with an unchanged value is a no-op.
+
+## 4. Playhead
+
+`repl.scheduler.now()` returns the current position in cycles (float), derived from
+`audioContext.currentTime`. Returns 0 when stopped. Read it in `requestAnimationFrame`.
+
+## 5. Param names (all in `@strudel/core/controls.mjs`)
+
+`gain`, `decay` (alias `dec`), `lpf` (alias of `cutoff`, also `ctf`, `lp`), `room`,
+`pan` (0..1, .5 = centre), `speed`, `bank`, `swingBy(amount, n)` (delays the 2nd half of
+each of n slices by amount/2 of a slice; `swing(n)` = `swingBy(1/3, n)`).
+
+## Other findings
+
+- strudel.cc share link: `https://strudel.cc/#` + `encodeURIComponent(base64(utf8(code)))`.
+- Vitest: `@kabelsalat/web` (dep of `@strudel/core`) exposes CJS as `main`; tests alias it
+  to its ESM build and inline `@strudel/*` (see `vite.config.js`). Browser build unaffected.
+
+## Reference pattern
+
+`$: s("[bd <hh oh>]*2").bank("tr909").dec(.4)` — note the `<hh oh>` alternates **per
+repetition of the `*2`**, i.e. every bar is `bd hh bd oh`. With one line per track the GUI
+produces the musically identical
+
+```
+$: s("bd*2").bank("tr909").dec(.4)
+$: s("~ hh ~ ~").bank("tr909").dec(.4)
+$: s("~ ~ ~ oh").bank("tr909").dec(.4)
+```
+
+(`codegen.test.js` proves event-for-event equality using Strudel's own parser.) The exact
+one-line string is not reachable with the current data model; it would need multi-sound
+tracks plus line merging. The step "alt" (`<a b>` at a step) alternates per **bar**, which
+is a different groove.
