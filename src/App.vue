@@ -11,7 +11,7 @@ import { init, unlockAudio, evaluate, stop, onError, preloadSamples, hasSound, r
 import { startPlayhead, stopPlayhead } from './engine/playhead.js';
 import { project, ui, addTrack, addSynth, SOUNDS, defaultProject, replaceProject } from './store/project.js';
 
-const SOURCE_URL = import.meta.env.VITE_SOURCE_URL || '#source-url-not-set';
+const SOURCE_URL = import.meta.env.VITE_SOURCE_URL || 'https://github.com/kimiyuch/offbeat.app';
 
 const code = computed(() => generateCode(project));
 const selected = computed(() => project.tracks.find((t) => t.id === ui.selectedId) ?? null);
