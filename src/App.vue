@@ -2,12 +2,13 @@
 import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import Transport from './components/Transport.vue';
 import TrackRow from './components/TrackRow.vue';
+import SynthRow from './components/SynthRow.vue';
 import TrackParams from './components/TrackParams.vue';
 import CodePreview from './components/CodePreview.vue';
 import { generateCode } from './engine/codegen.js';
 import { init, unlockAudio, evaluate, stop, onError } from './engine/strudel.js';
 import { startPlayhead, stopPlayhead } from './engine/playhead.js';
-import { project, ui, addTrack, SOUNDS, defaultProject, replaceProject } from './store/project.js';
+import { project, ui, addTrack, addSynth, SOUNDS, defaultProject, replaceProject } from './store/project.js';
 
 const SOURCE_URL = import.meta.env.VITE_SOURCE_URL || '#source-url-not-set';
 
@@ -95,15 +96,21 @@ function resetAll() {
           <span v-for="i in 16" :key="i" :class="(i - 1) % 4 === 0 ? 'text-zinc-300' : ''">{{ i }}</span>
         </div>
       </div>
-      <TrackRow v-for="t in project.tracks" :key="t.id" :track="t" />
+      <template v-for="t in project.tracks" :key="t.id">
+        <SynthRow v-if="t.type === 'synth'" :track="t" />
+        <TrackRow v-else :track="t" />
+      </template>
       <div class="flex items-center gap-2 px-2 pt-2">
         <select v-model="newSound" class="rounded border border-zinc-700 bg-zinc-950 px-1.5 py-1 text-sm" aria-label="Sound for new track">
           <option v-for="s in SOUNDS" :key="s" :value="s">{{ s }}</option>
         </select>
         <button type="button" class="rounded border border-zinc-700 px-2 py-1 text-sm hover:bg-zinc-800" @click="addTrack(newSound)">
-          + Add track
+          + Drum track
         </button>
-        <span class="ml-auto text-[11px] text-zinc-500">right-click or long-press a step to alternate it with another sound each bar</span>
+        <button type="button" class="rounded border border-sky-700 px-2 py-1 text-sm text-sky-300 hover:bg-sky-950" @click="addSynth">
+          + Synth track
+        </button>
+        <span class="ml-auto text-[11px] text-zinc-500">drums: right-click / long-press a step to alternate sounds each bar</span>
       </div>
     </section>
 

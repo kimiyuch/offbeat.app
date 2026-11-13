@@ -78,3 +78,23 @@ $: s("~ ~ ~ oh").bank("tr909").dec(.4)
 one-line string is not reachable with the current data model; it would need multi-sound
 tracks plus line merging. The step "alt" (`<a b>` at a step) alternates per **bar**, which
 is a different groove.
+
+## Synth tracks (phase 4)
+
+- Oscillators registered by `@strudel/web`'s default prebake: `sawtooth`, `square`,
+  `triangle`, `sine`, `supersaw` (AudioWorklet; bundled in `@strudel/web/dist`), plus
+  `pulse`, `user`, `one` (not exposed).
+- Melodies: `n("0 2 4").scale("C2:minor")` — scale degrees, root with octave, Tonal scale
+  names with spaces written as `:` (`"C2:minor:pentatonic"`). Degrees may be negative/>7.
+- Note length: in mini-notation an event lasts its slot; `_` extends the previous event
+  (`"0 _ _ ~"` = a 3/16 note). **Unlike samples, synth duration matters**, so codegen only
+  coarsens `note _` → `note` and `~ ~` → `~`, never `note ~` → `note` (that would lengthen
+  it). Samples ignore hap duration unless `clip`/`release` is set
+  (superdough `sampler.mjs`: `duration = sliceDuration`).
+- Amp envelope: if *any* of attack/decay/sustain/release is set, superdough fills the
+  rest with context-dependent defaults (e.g. decay alone ⇒ sustain≈0). So codegen emits
+  all four together as `.adsr("a:d:s:r")` or none. Unset = `[.001, .001, 1, .01]`.
+- Filter: `lpf`, `lpq` (resonance, default 1), `lpenv` (env amount in octaves; enables the
+  filter envelope), `lpdecay` (default .14 when env is on; lpattack/lpsustain/lprelease
+  also exist).
+- `delay(amount)`; `delaytime` defaults to .25 s, `delayfeedback` to .5 (not exposed yet).

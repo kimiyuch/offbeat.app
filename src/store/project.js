@@ -1,11 +1,20 @@
 import { reactive, watch } from 'vue';
-import { STEPS } from '../engine/codegen.js';
+import { STEPS, trackType } from '../engine/codegen.js';
+import { SCALES, ROOTS } from '../engine/scales.js';
 
 export const SOUNDS = ['bd', 'sd', 'hh', 'oh', 'cp', 'rim', 'lt', 'mt', 'ht', 'cr', 'rd', 'cb'];
+export const WAVES = ['sawtooth', 'square', 'triangle', 'sine', 'supersaw'];
 export const BANKS = ['tr909', 'tr808', 'tr707', 'tr606', 'tr505', 'linn', 'lm1'];
 
 // Initial knob values for a new track (not the same as codegen's "omit" defaults).
-export const NEW_TRACK_PARAMS = { gain: 1, dec: 0, lpf: 20000, room: 0, pan: 0.5, speed: 1 };
+export const NEW_PARAMS = {
+  drum: { gain: 1, dec: 0, lpf: 20000, room: 0, pan: 0.5, speed: 1 },
+  synth: {
+    gain: 0.7, lpf: 700, lpq: 6, lpenv: 3, lpdecay: 0.2,
+    attack: 0.005, decay: 0.2, sustain: 0.4, release: 0.1,
+    room: 0, delay: 0, pan: 0.5,
+  },
+};
 
 const STORAGE_KEY = 'groovebox:v1';
 let nextId = 1;
@@ -17,7 +26,26 @@ function makeTrack(sound, hits = []) {
     steps: Array.from({ length: STEPS }, (_, i) => ({ on: hits.includes(i), alt: null })),
     mute: false,
     solo: false,
-    params: { ...NEW_TRACK_PARAMS },
+    params: { ...NEW_PARAMS.drum },
+  };
+}
+
+// notes: { step: [degree, lengthInSteps] }
+function makeSynth(sound = 'sawtooth', notes = {}, extra = {}) {
+  return {
+    id: `t${nextId++}`,
+    type: 'synth',
+    sound,
+    root: 'C',
+    octave: 2,
+    mode: 'minor',
+    steps: Array.from({ length: STEPS }, (_, i) =>
+      i in notes ? { on: true, note: notes[i][0], len: notes[i][1] ?? 1, alt: null } : { on: false, note: 0, len: 1, alt: null },
+    ),
+    mute: false,
+    solo: false,
+    params: { ...NEW_PARAMS.synth },
+    ...extra,
   };
 }
 
@@ -31,6 +59,7 @@ export function defaultProject() {
       makeTrack('sd', [4, 12]),
       makeTrack('hh', [2, 6, 10, 14]),
       makeTrack('oh', []),
+      makeSynth('sawtooth', { 0: [0, 2], 3: [0, 1], 6: [7, 2], 8: [0, 2], 11: [5, 1], 12: [3, 2], 14: [2, 2] }),
     ],
   };
 }
@@ -49,6 +78,27 @@ export function fromJSON(raw) {
 }
 
 function normTrack(t) {
+  if (trackType(t) === 'synth') {
+    const base = makeSynth(WAVES.includes(t.sound) ? t.sound : 'sawtooth');
+    return {
+      ...base,
+      root: ROOTS.includes(t.root) ? t.root : 'C',
+      octave: Number.isInteger(t.octave) ? clamp(t.octave, 0, 6) : 2,
+      mode: t.mode in SCALES ? t.mode : 'minor',
+      mute: !!t.mute,
+      solo: !!t.solo,
+      steps: base.steps.map((s, i) => {
+        const r = t.steps?.[i];
+        return {
+          on: !!r?.on,
+          note: Number.isInteger(r?.note) ? r.note : 0,
+          len: Number.isInteger(r?.len) ? clamp(r.len, 1, STEPS - i) : 1,
+          alt: Number.isInteger(r?.alt) ? r.alt : null,
+        };
+      }),
+      params: { ...NEW_PARAMS.synth, ...pickNumbers(t.params, 'synth') },
+    };
+  }
   const base = makeTrack(typeof t?.sound === 'string' ? t.sound : 'bd');
   return {
     ...base,
@@ -58,13 +108,13 @@ function normTrack(t) {
       on: !!t?.steps?.[i]?.on,
       alt: typeof t?.steps?.[i]?.alt === 'string' ? t.steps[i].alt : null,
     })),
-    params: { ...NEW_TRACK_PARAMS, ...pickNumbers(t?.params) },
+    params: { ...NEW_PARAMS.drum, ...pickNumbers(t?.params, 'drum') },
   };
 }
 
-function pickNumbers(o) {
+function pickNumbers(o, type) {
   const out = {};
-  for (const k of Object.keys(NEW_TRACK_PARAMS)) if (Number.isFinite(o?.[k])) out[k] = o[k];
+  for (const k of Object.keys(NEW_PARAMS[type])) if (Number.isFinite(o?.[k])) out[k] = o[k];
   return out;
 }
 
@@ -141,6 +191,14 @@ export function addTrack(sound = 'cp') {
   ui.selectedId = t.id;
 }
 
+export function addSynth() {
+  const other = project.tracks.find((x) => x.type === 'synth');
+  const t = makeSynth('square', {}, { octave: 4, root: other?.root ?? 'C', mode: other?.mode ?? 'minor' });
+  t.params = { ...t.params, lpf: 2500, lpenv: 1, sustain: 0.3, delay: 0.3, room: 0.2 };
+  project.tracks.push(t);
+  ui.selectedId = t.id;
+}
+
 export function removeTrack(id) {
   const i = project.tracks.findIndex((t) => t.id === id);
   if (i < 0) return;
@@ -150,5 +208,5 @@ export function removeTrack(id) {
 
 export function clearTrack(id) {
   const t = project.tracks.find((t) => t.id === id);
-  t?.steps.forEach((s) => ((s.on = false), (s.alt = null)));
+  t?.steps.forEach((s) => Object.assign(s, { on: false, alt: null }, 'len' in s ? { len: 1 } : {}));
 }
