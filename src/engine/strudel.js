@@ -1,5 +1,15 @@
 // The only file that imports @strudel/web. Everything else uses these exports.
-import { initStrudel, samples, aliasBank, evaluate as strudelEvaluate, hush, initAudio } from '@strudel/web';
+import {
+  initStrudel,
+  samples,
+  aliasBank,
+  evaluate as strudelEvaluate,
+  hush,
+  initAudio,
+  getSound,
+  loadBuffer,
+  getAudioContext,
+} from '@strudel/web';
 
 const CDN = 'https://strudel.b-cdn.net';
 const errorListeners = new Set();
@@ -51,4 +61,35 @@ export function getCycle() {
 export function onError(fn) {
   errorListeners.add(fn);
   return () => errorListeners.delete(fn);
+}
+
+// Fetch + decode drum samples ahead of time so the first hit isn't silent.
+// `names` are bank-qualified sound keys, e.g. "tr909_bd". Unknown names (a
+// sound the machine doesn't have) are skipped. Resolves to the keys that failed.
+export async function preloadSamples(names, onProgress) {
+  await init();
+  const ac = getAudioContext();
+  const jobs = names.map((key) => ({ key, url: getSound(key)?.data?.samples?.[0] })).filter((j) => typeof j.url === 'string');
+  let done = 0;
+  onProgress?.(done, jobs.length);
+  const failed = [];
+  await Promise.all(
+    jobs.map((j) =>
+      loadBuffer(j.url, ac, j.key)
+        .catch(() => failed.push(j.key))
+        .finally(() => onProgress?.(++done, jobs.length)),
+    ),
+  );
+  return failed;
+}
+
+// Which bank-qualified sounds exist (for greying out sounds a machine lacks).
+export function hasSound(key) {
+  return !!getSound(key);
+}
+
+// Safari suspends audio in background tabs; resume when the tab comes back.
+export function resumeAudio() {
+  const ac = getAudioContext();
+  if (ac.state !== 'running') return ac.resume().catch(() => {});
 }

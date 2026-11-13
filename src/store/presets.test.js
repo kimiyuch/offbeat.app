@@ -39,3 +39,33 @@ describe('built-in melodies', () => {
     });
   }
 });
+
+import { randomMelody } from './presets.js';
+
+describe('randomMelody', () => {
+  const seeded = (seed) => () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  for (const style of ['bass', 'lead']) {
+    it(`${style}: 200 seeds all fit the piano roll and parse`, () => {
+      for (let seed = 1; seed <= 200; seed++) {
+        const notes = randomMelody(style, seeded(seed));
+        const m = { notes };
+        expect(Object.keys(notes).length).toBeGreaterThan(2);
+        for (const [step, [deg, len, alt = null]] of Object.entries(notes)) {
+          expect(deg).toBeGreaterThanOrEqual(0);
+          expect(deg).toBeLessThan(ROWS);
+          if (alt !== null) expect(alt).toBeGreaterThanOrEqual(0), expect(alt).toBeLessThan(ROWS);
+          expect(Number(step) + len).toBeLessThanOrEqual(STEPS);
+        }
+        const track = { type: 'synth', sound: 'square', root: 'C', octave: 3, mode: 'minor', steps: toSteps(m), params: {} };
+        const body = trackToLine(track, { swing: 0 }).match(/n\("([^"]*)"\)/)[1];
+        expect(() => mini(body).queryArc(0, 2)).not.toThrow();
+      }
+    });
+  }
+  it('bass always starts on the root on beat one', () => {
+    for (let seed = 1; seed <= 50; seed++) {
+      const n = randomMelody('bass', seeded(seed));
+      if (n[0]) expect(n[0][0]).toBe(0);
+    }
+  });
+});

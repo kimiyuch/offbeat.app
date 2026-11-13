@@ -2,11 +2,17 @@
 import { computed, ref } from 'vue';
 import { STEPS } from '../engine/codegen.js';
 import { SCALES, ROOTS, degreeLabel } from '../engine/scales.js';
-import { WAVES, ui, removeTrack, clearTrack, userMelodies, applyMelody, saveMelody, deleteMelody } from '../store/project.js';
-import { MELODIES, KIND_LABELS } from '../store/presets.js';
+import { WAVES, ui, removeTrack, clearTrack, userMelodies, applyMelody, saveMelody, deleteMelody, stepsOf, setNotes } from '../store/project.js';
+import { MELODIES, KIND_LABELS, randomMelody } from '../store/presets.js';
 import { currentStep } from '../engine/playhead.js';
 
 const props = defineProps({ track: { type: Object, required: true } });
+const steps = computed(() => stepsOf(props.track)); // the pattern being edited
+
+function onDice() {
+  ui.selectedId = props.track.id;
+  setNotes(props.track, randomMelody(props.track.octave <= 2 ? 'bass' : 'lead'));
+}
 
 const ROWS = 15; // scale degrees 0..14 (two octaves of a 7-note scale)
 const degrees = Array.from({ length: ROWS }, (_, i) => ROWS - 1 - i); // top = highest
@@ -24,7 +30,7 @@ function onPickMelody() {
   if (selectedMelody.value) applyMelody(props.track, selectedMelody.value);
 }
 function onSave() {
-  if (!props.track.steps.some((s) => s.on)) return alert('Nothing to save: the piano roll is empty.');
+  if (!steps.value.some((s) => s.on)) return alert('Nothing to save: the piano roll is empty.');
   const name = prompt('Name this melody:', `My melody ${userMelodies.length + 1}`)?.trim();
   if (name) melodyId.value = saveMelody(props.track, name).id;
 }
@@ -41,7 +47,7 @@ const label = (d) => degreeLabel(d, props.track.root, props.track.octave, props.
 // Same rule as codegen.synthTokens: a note lasts `len` steps unless the next note cuts it.
 const spans = computed(() => {
   const out = [];
-  const s = props.track.steps;
+  const s = steps.value;
   for (let i = 0; i < STEPS; i++) {
     if (!s[i].on) continue;
     let end = Math.min(STEPS, i + Math.max(1, s[i].len));
@@ -72,14 +78,14 @@ function stepFromX(x) {
 function onDown(e, d, i) {
   if (e.button !== 0) return;
   ui.selectedId = props.track.id;
-  const steps = props.track.steps;
+  const st = steps.value;
   const sp = spanAt(i);
   if (sp && sp.note === d) {
     // grab an existing note: click deletes (if on its head), drag resizes
     drag = { start: sp.start, deleteOnUp: i === sp.start, moved: false };
   } else {
-    if (sp && sp.start < i) steps[sp.start].len = i - sp.start; // cut the note we land inside
-    Object.assign(steps[i], { on: true, note: d, len: 1, alt: null });
+    if (sp && sp.start < i) st[sp.start].len = i - sp.start; // cut the note we land inside
+    Object.assign(st[i], { on: true, note: d, len: 1, alt: null });
     drag = { start: i, deleteOnUp: false, moved: false };
   }
   grid.value.setPointerCapture(e.pointerId);
@@ -89,7 +95,7 @@ function onMove(e) {
   if (!drag) return;
   const j = stepFromX(e.clientX);
   const len = Math.max(1, j - drag.start + 1);
-  const s = props.track.steps[drag.start];
+  const s = steps.value[drag.start];
   if (len !== s.len) {
     s.len = len;
     drag.moved = true;
@@ -98,14 +104,14 @@ function onMove(e) {
 
 function onUp() {
   if (!drag) return;
-  const steps = props.track.steps;
-  const s = steps[drag.start];
+  const st = steps.value;
+  const s = st[drag.start];
   if (drag.deleteOnUp && !drag.moved) {
     Object.assign(s, { on: false, len: 1, alt: null });
   } else {
     // a stretched note swallows the notes it now covers
     for (let j = drag.start + 1; j < Math.min(STEPS, drag.start + s.len); j++) {
-      Object.assign(steps[j], { on: false, len: 1, alt: null });
+      Object.assign(st[j], { on: false, len: 1, alt: null });
     }
   }
   drag = null;
@@ -114,14 +120,14 @@ function onUp() {
 function onContext(d, i) {
   const sp = spanAt(i);
   if (!sp) return;
-  const head = props.track.steps[sp.start];
+  const head = steps.value[sp.start];
   head.alt = d === sp.note || d === head.alt ? null : d;
 }
 </script>
 
 <template>
   <div
-    class="grid grid-cols-[11rem_1fr] gap-3 rounded-lg p-2"
+    class="grid grid-cols-1 gap-2 rounded-lg p-2 sm:grid-cols-[11rem_1fr] sm:gap-3"
     :class="ui.selectedId === track.id ? 'bg-zinc-800/80' : 'hover:bg-zinc-800/40'"
     @pointerdown="ui.selectedId = track.id"
   >
@@ -161,6 +167,7 @@ function onContext(d, i) {
             <option v-for="m in g.items" :key="m.id" :value="m.id">{{ m.name }}</option>
           </optgroup>
         </select>
+        <button type="button" class="h-6 rounded border border-zinc-700 px-1.5 text-xs hover:bg-zinc-700" title="Random melody in this scale (notes only; roll again for another)" aria-label="Random melody" @click="onDice">🎲</button>
         <button type="button" class="h-6 rounded border border-zinc-700 px-1.5 text-xs text-zinc-300 hover:bg-zinc-700" title="Save these notes as a melody" @click="onSave">save</button>
         <button
           v-if="selectedMelody?.kind === 'mine'"

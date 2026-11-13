@@ -1,5 +1,5 @@
 import { reactive, watch } from 'vue';
-import { STEPS, trackType } from '../engine/codegen.js';
+import { STEPS, trackType, PATTERN_NAMES } from '../engine/codegen.js';
 import { SCALES, ROOTS } from '../engine/scales.js';
 
 export const SOUNDS = ['bd', 'sd', 'hh', 'oh', 'cp', 'rim', 'lt', 'mt', 'ht', 'cr', 'rd', 'cb'];
@@ -19,19 +19,29 @@ export const NEW_PARAMS = {
 const STORAGE_KEY = 'groovebox:v1';
 let nextId = 1;
 
-function makeTrack(sound, hits = []) {
+const NPATS = PATTERN_NAMES.length;
+const drumSteps = (hits = []) => Array.from({ length: STEPS }, (_, i) => ({ on: hits.includes(i), alt: null }));
+const synthSteps = (notes = {}) =>
+  Array.from({ length: STEPS }, (_, i) => {
+    const n = notes[i];
+    return n ? { on: true, note: n[0], len: n[1] ?? 1, alt: n[2] ?? null } : { on: false, note: 0, len: 1, alt: null };
+  });
+const emptySteps = (track) => (trackType(track) === 'synth' ? synthSteps() : drumSteps());
+
+// hitsPerPattern: [[hits of A], [hits of B], ...]; missing patterns are empty
+function makeTrack(sound, ...hitsPerPattern) {
   return {
     id: `t${nextId++}`,
     sound,
-    steps: Array.from({ length: STEPS }, (_, i) => ({ on: hits.includes(i), alt: null })),
+    pats: Array.from({ length: NPATS }, (_, p) => drumSteps(hitsPerPattern[p])),
     mute: false,
     solo: false,
     params: { ...NEW_PARAMS.drum },
   };
 }
 
-// notes: { step: [degree, lengthInSteps] }
-function makeSynth(sound = 'sawtooth', notes = {}, extra = {}) {
+// notesPerPattern: [{ step: [degree, lengthInSteps, alt] }, ...]
+function makeSynth(sound = 'sawtooth', notesPerPattern = [], extra = {}) {
   return {
     id: `t${nextId++}`,
     type: 'synth',
@@ -39,9 +49,7 @@ function makeSynth(sound = 'sawtooth', notes = {}, extra = {}) {
     root: 'C',
     octave: 2,
     mode: 'minor',
-    steps: Array.from({ length: STEPS }, (_, i) =>
-      i in notes ? { on: true, note: notes[i][0], len: notes[i][1] ?? 1, alt: null } : { on: false, note: 0, len: 1, alt: null },
-    ),
+    pats: Array.from({ length: NPATS }, (_, p) => synthSteps(notesPerPattern[p])),
     mute: false,
     solo: false,
     params: { ...NEW_PARAMS.synth },
@@ -54,15 +62,26 @@ export function defaultProject() {
     bpm: 120,
     swing: 0,
     bank: 'tr909',
+    pattern: 0,
+    chain: [0, 0, 0, 1],
+    song: false,
     tracks: [
-      makeTrack('bd', [0, 4, 8, 12]),
-      makeTrack('sd', [4, 12]),
-      makeTrack('hh', [2, 6, 10, 14]),
-      makeTrack('oh', []),
-      makeSynth('sawtooth', { 0: [0, 2], 3: [0, 1], 6: [7, 2], 8: [0, 2], 11: [5, 1], 12: [3, 2], 14: [2, 2] }),
+      makeTrack('bd', [0, 4, 8, 12], [0, 4, 8, 10, 12]),
+      makeTrack('sd', [4, 12], [4, 12, 13, 14, 15]),
+      makeTrack('hh', [2, 6, 10, 14], [2, 6, 10]),
+      makeTrack('oh', [], [14]),
+      makeSynth('sawtooth', [
+        { 0: [0, 2], 3: [0, 1], 6: [7, 2], 8: [0, 2], 11: [5, 1], 12: [3, 2], 14: [2, 2] },
+        { 0: [0, 2], 3: [0, 1], 6: [7, 2], 8: [5, 2], 10: [4, 2], 12: [3, 2], 14: [4, 2] },
+      ]),
     ],
   };
 }
+
+export const MAX_CHAIN = 16;
+
+// Saved before patterns existed: a single `steps` array becomes pattern A.
+const rawPats = (t) => (Array.isArray(t?.pats) ? t.pats : [t?.steps]);
 
 // Accepts anything and returns a valid project (unknown/missing fields -> defaults).
 export function fromJSON(raw) {
@@ -72,6 +91,11 @@ export function fromJSON(raw) {
     bpm: clamp(Number(raw.bpm) || d.bpm, 40, 240),
     swing: clamp(Number(raw.swing) || 0, 0, 1),
     bank: typeof raw.bank === 'string' ? raw.bank : d.bank,
+    pattern: Number.isInteger(raw.pattern) ? clamp(raw.pattern, 0, NPATS - 1) : 0,
+    chain: Array.isArray(raw.chain)
+      ? raw.chain.filter((x) => Number.isInteger(x) && x >= 0 && x < NPATS).slice(0, MAX_CHAIN)
+      : [0],
+    song: !!raw.song,
     tracks: Array.isArray(raw.tracks) ? raw.tracks.map(normTrack) : d.tracks,
   };
   return p;
@@ -87,15 +111,17 @@ function normTrack(t) {
       mode: t.mode in SCALES ? t.mode : 'minor',
       mute: !!t.mute,
       solo: !!t.solo,
-      steps: base.steps.map((s, i) => {
-        const r = t.steps?.[i];
-        return {
-          on: !!r?.on,
-          note: Number.isInteger(r?.note) ? r.note : 0,
-          len: Number.isInteger(r?.len) ? clamp(r.len, 1, STEPS - i) : 1,
-          alt: Number.isInteger(r?.alt) ? r.alt : null,
-        };
-      }),
+      pats: base.pats.map((steps, p) =>
+        steps.map((s, i) => {
+          const r = rawPats(t)[p]?.[i];
+          return {
+            on: !!r?.on,
+            note: Number.isInteger(r?.note) ? r.note : 0,
+            len: Number.isInteger(r?.len) ? clamp(r.len, 1, STEPS - i) : 1,
+            alt: Number.isInteger(r?.alt) ? r.alt : null,
+          };
+        }),
+      ),
       params: { ...NEW_PARAMS.synth, ...pickNumbers(t.params, 'synth') },
     };
   }
@@ -104,10 +130,12 @@ function normTrack(t) {
     ...base,
     mute: !!t?.mute,
     solo: !!t?.solo,
-    steps: base.steps.map((s, i) => ({
-      on: !!t?.steps?.[i]?.on,
-      alt: typeof t?.steps?.[i]?.alt === 'string' ? t.steps[i].alt : null,
-    })),
+    pats: base.pats.map((steps, p) =>
+      steps.map((s, i) => {
+        const r = rawPats(t)[p]?.[i];
+        return { on: !!r?.on, alt: typeof r?.alt === 'string' ? r.alt : null };
+      }),
+    ),
     params: { ...NEW_PARAMS.drum, ...pickNumbers(t?.params, 'drum') },
   };
 }
@@ -126,6 +154,9 @@ export function toJSON(p) {
     bpm: p.bpm,
     swing: p.swing,
     bank: p.bank,
+    pattern: p.pattern,
+    chain: p.chain,
+    song: p.song,
     tracks: p.tracks.map(({ id, ...t }) => t),
   };
 }
@@ -193,7 +224,7 @@ export function addTrack(sound = 'cp') {
 
 export function addSynth() {
   const other = project.tracks.find((x) => x.type === 'synth');
-  const t = makeSynth('square', {}, { octave: 4, root: other?.root ?? 'C', mode: other?.mode ?? 'minor' });
+  const t = makeSynth('square', [], { octave: 4, root: other?.root ?? 'C', mode: other?.mode ?? 'minor' });
   t.params = { ...t.params, lpf: 2500, lpenv: 1, sustain: 0.3, delay: 0.3, room: 0.2 };
   project.tracks.push(t);
   ui.selectedId = t.id;
@@ -206,9 +237,39 @@ export function removeTrack(id) {
   if (ui.selectedId === id) ui.selectedId = project.tracks[Math.max(0, i - 1)]?.id ?? null;
 }
 
+// The steps currently being edited for a track.
+export const stepsOf = (track) => track.pats[project.pattern];
+
 export function clearTrack(id) {
   const t = project.tracks.find((t) => t.id === id);
-  t?.steps.forEach((s) => Object.assign(s, { on: false, alt: null }, 'len' in s ? { len: 1 } : {}));
+  if (t) t.pats[project.pattern] = emptySteps(t);
+}
+
+// --- patterns & chain ---
+export const patternHasNotes = (p) => project.tracks.some((t) => t.pats[p].some((s) => s.on));
+
+let clipboard = null;
+export const clip = reactive({ has: false, from: null });
+export function copyPattern() {
+  clipboard = project.tracks.map((t) => ({ id: t.id, steps: JSON.parse(JSON.stringify(t.pats[project.pattern])) }));
+  clip.has = true;
+  clip.from = project.pattern;
+}
+export function pastePattern() {
+  if (!clipboard) return;
+  for (const t of project.tracks) {
+    const c = clipboard.find((x) => x.id === t.id);
+    if (c) t.pats[project.pattern] = JSON.parse(JSON.stringify(c.steps));
+  }
+}
+export function clearPattern() {
+  for (const t of project.tracks) t.pats[project.pattern] = emptySteps(t);
+}
+export function chainPush(p) {
+  if (project.chain.length < MAX_CHAIN) project.chain.push(p);
+}
+export function chainRemove(k) {
+  project.chain.splice(k, 1);
 }
 
 // --- melodies: built-in presets + the user's own (localStorage only) ---
@@ -233,10 +294,7 @@ watch(userMelodies, () => {
 
 // Replaces the track's notes, sound, octave and knobs. Key and scale stay.
 export function applyMelody(track, m) {
-  track.steps = Array.from({ length: STEPS }, (_, i) => {
-    const n = m.notes[i];
-    return n ? { on: true, note: n[0], len: n[1] ?? 1, alt: n[2] ?? null } : { on: false, note: 0, len: 1, alt: null };
-  });
+  track.pats[project.pattern] = synthSteps(m.notes);
   if (WAVES.includes(m.sound)) track.sound = m.sound;
   if (Number.isInteger(m.octave)) track.octave = m.octave;
   track.params = { ...NEW_PARAMS.synth, ...pickNumbers(m.params, 'synth') };
@@ -244,7 +302,7 @@ export function applyMelody(track, m) {
 
 export function saveMelody(track, name) {
   const notes = {};
-  track.steps.forEach((s, i) => {
+  stepsOf(track).forEach((s, i) => {
     if (s.on) notes[i] = [s.note, s.len, s.alt];
   });
   const m = { id: `u${Date.now()}`, name, kind: 'mine', sound: track.sound, octave: track.octave, params: { ...track.params }, notes };
@@ -255,4 +313,9 @@ export function saveMelody(track, name) {
 export function deleteMelody(id) {
   const i = userMelodies.findIndex((m) => m.id === id);
   if (i >= 0) userMelodies.splice(i, 1);
+}
+
+// Notes only: keeps the track's sound and knobs.
+export function setNotes(track, notes) {
+  track.pats[project.pattern] = synthSteps(notes);
 }

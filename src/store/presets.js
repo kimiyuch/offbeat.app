@@ -115,3 +115,52 @@ export const MELODIES = [
 ];
 
 export const KIND_LABELS = { bass: 'Bass', lead: 'Lead', arp: 'Arp', mine: 'My melodies' };
+
+// --- random melodies ---
+// Musical-ish rather than uniform noise: rhythms come from a few groove
+// templates, bass favours root/fifth/octave on strong beats, and leads move
+// mostly stepwise with occasional leaps to chord tones.
+// `style`: 'bass' | 'lead'. `rand`: () => [0, 1) (inject for tests).
+const BASS_RHYTHMS = [
+  [0, 3, 6, 8, 11, 14],
+  [0, 2, 4, 6, 8, 10, 12, 14],
+  [0, 3, 8, 11, 12],
+  [2, 6, 10, 14],
+  [0, 1, 4, 6, 8, 9, 12, 14],
+];
+const LEAD_RHYTHMS = [
+  [0, 3, 6, 8, 10, 12],
+  [0, 2, 3, 6, 8, 11, 12],
+  [0, 4, 6, 8, 12, 14],
+  [0, 1, 2, 4, 8, 9, 10, 12],
+];
+
+export function randomMelody(style = 'lead', rand = Math.random) {
+  const pick = (a) => a[Math.floor(rand() * a.length)];
+  const starts = [...pick(style === 'bass' ? BASS_RHYTHMS : LEAD_RHYTHMS)];
+  const notes = {};
+  let deg = style === 'bass' ? 0 : pick([2, 4, 7]);
+  starts.forEach((s, k) => {
+    const next = starts[k + 1] ?? 16;
+    const gap = next - s;
+    if (style === 'bass') {
+      // root-heavy, with fifths, octaves and the odd passing note
+      deg = s % 8 === 0 ? 0 : pick([0, 0, 0, 4, 7, 2, 5, 3]);
+    } else {
+      // stepwise walk with occasional leaps to chord tones, kept in range
+      deg = rand() < 0.7 ? deg + pick([-2, -1, -1, 1, 1, 2]) : pick([0, 2, 4, 7, 9, 11]);
+      deg = Math.max(0, Math.min(11, deg));
+    }
+    // mostly fill the gap (legato) for leads, shorter for bass
+    const len = style === 'bass' ? Math.max(1, Math.min(gap, pick([1, 2, 2]))) : Math.max(1, gap - (rand() < 0.3 ? 1 : 0));
+    notes[s] = [deg, len];
+  });
+  // a bit of variation every other bar on one late note
+  const late = starts.filter((s) => s >= 8);
+  if (late.length && rand() < 0.6) {
+    const s = pick(late);
+    const alt = Math.max(0, Math.min(14, notes[s][0] + pick([-2, 2, 3, 4])));
+    if (alt !== notes[s][0]) notes[s][2] = alt;
+  }
+  return notes;
+}

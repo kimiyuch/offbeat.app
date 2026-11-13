@@ -40,21 +40,29 @@ export function num(v, digits = 2) {
 
 // --- step rows -> mini-notation ---
 
-function drumToken(step, sound) {
+// How a step with an alternate renders in a given chain slot:
+//   'ab' -> <main alt>   'ba' -> <alt main>   'a' -> main   'b' -> alt
+function altToken(main, alt, phase) {
+  if (phase === 'a') return main;
+  if (phase === 'b') return alt;
+  return phase === 'ba' ? `<${alt} ${main}>` : `<${main} ${alt}>`;
+}
+
+function drumToken(step, sound, phase = 'ab') {
   if (!step?.on) return '~';
-  return step.alt && step.alt !== sound ? `<${sound} ${step.alt}>` : sound;
+  return step.alt && step.alt !== sound ? altToken(sound, step.alt, phase) : sound;
 }
 
 // Monophonic note row. A note at step i lasts `len` steps (rendered as `_`
 // ties) unless the next note starts earlier, which cuts it short.
-export function synthTokens(steps) {
+export function synthTokens(steps, phase = 'ab') {
   const out = [];
   let remaining = 0;
   for (let i = 0; i < STEPS; i++) {
     const s = steps[i];
     if (s?.on) {
       const n = s.note ?? 0;
-      out.push(s.alt != null && s.alt !== n ? `<${n} ${s.alt}>` : String(n));
+      out.push(s.alt != null && s.alt !== n ? altToken(String(n), String(s.alt), phase) : String(n));
       remaining = Math.max(1, s.len ?? 1) - 1;
     } else if (remaining > 0) {
       out.push('_');
@@ -102,12 +110,67 @@ function coarsen(tokens, keepLength) {
   return cur;
 }
 
-export function stepsToMini(steps, sound) {
-  return tokensToMini(Array.from({ length: STEPS }, (_, i) => drumToken(steps[i], sound)));
+export function stepsToMini(steps, sound, phase) {
+  return tokensToMini(Array.from({ length: STEPS }, (_, i) => drumToken(steps[i], sound, phase)));
 }
 
-export function synthStepsToMini(steps) {
-  return tokensToMini(synthTokens(steps), { keepLength: true });
+export function synthStepsToMini(steps, phase) {
+  return tokensToMini(synthTokens(steps, phase), { keepLength: true });
+}
+
+// --- patterns and song chain ---
+
+export const PATTERN_NAMES = ['A', 'B', 'C', 'D'];
+
+// A track's patterns. Older/simple tracks only have `steps` (= pattern A).
+export const patternsOf = (track) => track.pats ?? [track.steps];
+
+// Which pattern plays in which bar: the chain in song mode, else the edited pattern.
+export function playOrder(project) {
+  if (project.song && project.chain?.length) return project.chain;
+  return [project.pattern ?? 0];
+}
+
+// Alternation must flip every time a pattern *plays*. Inside `<slot slot …>`,
+// a slot's own `<a b>` only advances once per pass through the whole chain
+// (verified against Strudel's mini parser), so each slot gets an explicit phase:
+// if pattern p appears c times per pass, its i-th appearance plays
+// occurrence number pass*c + i. Even c: parity fixed per slot -> 'a' / 'b'.
+// Odd c: parity flips every pass -> '<a b>' or '<b a>'.
+export function slotPhases(order) {
+  const seen = {};
+  const count = {};
+  order.forEach((p) => (count[p] = (count[p] ?? 0) + 1));
+  return order.map((p) => {
+    const i = (seen[p] = (seen[p] ?? -1) + 1);
+    if (count[p] % 2 === 0) return i % 2 === 0 ? 'a' : 'b';
+    return i % 2 === 0 ? 'ab' : 'ba';
+  });
+}
+
+const wrap = (m) => (/^[^\s*\[<]+$/.test(m) ? m : `[${m}]`);
+
+// One mini-notation string for the whole play order, e.g. "<[bd*4]!3 [bd ~ bd sd]>".
+export function trackMini(track, order) {
+  const pats = patternsOf(track);
+  const phases = slotPhases(order);
+  const synth = trackType(track) === 'synth';
+  const slots = order.map((p, k) => {
+    const steps = pats[p];
+    if (!steps?.some((s) => s.on)) return '~';
+    return synth ? synthStepsToMini(steps, phases[k]) : stepsToMini(steps, track.sound, phases[k]);
+  });
+  if (slots.every((m) => m === '~')) return null;
+  if (slots.every((m) => m === slots[0])) return slots[0];
+  // run-length: consecutive equal slots -> x!n
+  const parts = [];
+  for (let k = 0; k < slots.length; ) {
+    let n = 1;
+    while (slots[k + n] === slots[k]) n++;
+    parts.push(n > 1 ? `${wrap(slots[k])}!${n}` : wrap(slots[k]));
+    k += n;
+  }
+  return `<${parts.join(' ')}>`;
 }
 
 // --- tracks -> lines ---
@@ -143,13 +206,14 @@ function adsrCall(p, defaults) {
 
 export function trackToLine(track, project) {
   const type = trackType(track);
-  if (!track.steps.some((s) => s.on)) return null;
+  const mini = trackMini(track, playOrder(project));
+  if (!mini) return null;
   let line;
   if (type === 'synth') {
     const scale = `${track.root ?? 'C'}${track.octave ?? 3}:${track.mode ?? 'minor'}`;
-    line = `$: n("${synthStepsToMini(track.steps)}").scale("${scale}").s("${track.sound}")`;
+    line = `$: n("${mini}").scale("${scale}").s("${track.sound}")`;
   } else {
-    line = `$: s("${stepsToMini(track.steps, track.sound)}")`;
+    line = `$: s("${mini}")`;
     const bank = track.bank || project.bank;
     if (bank) line += `.bank("${bank}")`;
   }

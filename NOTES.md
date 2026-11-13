@@ -98,3 +98,29 @@ is a different groove.
   filter envelope), `lpdecay` (default .14 when env is on; lpattack/lpsustain/lprelease
   also exist).
 - `delay(amount)`; `delaytime` defaults to .25 s, `delayfeedback` to .5 (not exposed yet).
+
+## Song mode (patterns A–D + chain)
+
+- Each track has `pats[4]`; sound/knobs are per track, steps per pattern. Old projects
+  (`steps` only) load as pattern A.
+- Codegen: one line per track, `<slot slot …>` with one slot per bar, `x!n` for repeats,
+  plain mini when all slots are equal. Empty slot = `~`.
+- **Gotcha (verified with @strudel/mini):** inside `<[a <x y>] [b c]>` the inner `<x y>`
+  advances once per *pass through the whole chain*, not per play of that slot. And
+  `<[A] [A] [B]>` gives both A-slots the same phase. So codegen resolves alternation per
+  slot (`slotPhases`): a pattern appearing c times per pass — even c ⇒ fixed `main`/`alt`
+  per slot, odd c ⇒ `<main alt>` / `<alt main>`. `song.test.js` checks this against a
+  bar-by-bar ground truth for random patterns and chains.
+- Swapping code mid-bar keeps the clock, so the bar counter (`floor(scheduler.now())`)
+  maps to chain slot `bar % chain.length` — matches how `<…>` picks slots.
+
+## Sample preloading
+
+`getSound("tr909_bd").data.samples` is the URL list (drum machines: array);
+`loadBuffer(url, getAudioContext(), label)` fetches + decodes into superdough's cache
+(same cache key the sampler uses). Works while the AudioContext is still suspended.
+A sound missing from a machine (e.g. `tr909_cb`) has no entry → flagged "silent" in the UI.
+
+## Background tabs
+
+Safari suspends the AudioContext in background tabs; we `resume()` on `visibilitychange`.

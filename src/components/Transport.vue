@@ -10,7 +10,7 @@ defineEmits(['toggle']);
 </script>
 
 <template>
-  <section class="flex flex-wrap items-center gap-6 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+  <section class="flex flex-wrap items-center gap-4 rounded-xl sm:gap-6 border border-zinc-800 bg-zinc-900 p-4">
     <button
       type="button"
       class="flex h-14 w-32 items-center justify-center gap-2 rounded-lg text-lg font-bold transition-colors"
@@ -26,7 +26,7 @@ defineEmits(['toggle']);
     <label class="flex flex-col gap-1">
       <span class="text-[10px] uppercase tracking-wider text-zinc-400">Tempo</span>
       <span class="flex items-center gap-2">
-        <input v-model.number="project.bpm" type="range" min="60" max="200" class="w-36 accent-amber-400" aria-label="Tempo slider" />
+        <input v-model.number="project.bpm" type="range" min="60" max="200" class="w-28 accent-amber-400 sm:w-36" aria-label="Tempo slider" />
         <input
           v-model.number="project.bpm"
           type="number"
@@ -48,7 +48,7 @@ defineEmits(['toggle']);
       </select>
     </label>
 
-    <div class="ml-auto text-right text-[11px] leading-relaxed text-zinc-500">
+    <div class="ml-auto hidden text-right text-[11px] leading-relaxed text-zinc-500 md:block">
       <kbd class="rounded border border-zinc-700 px-1">space</kbd> play / stop
     </div>
   </section>
