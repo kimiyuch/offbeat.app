@@ -71,3 +71,38 @@ describe('trance demo harmony', () => {
     expect(bass.slice(12, 20).every((n) => n === null)).toBe(true); // breakdown: no bass
   });
 });
+
+describe('electro demo harmony', () => {
+  const project = fromJSON(DEMOS.find((d) => d.id === 'electro').build());
+  const byName = (n) => project.tracks.find((t) => t.name === n);
+  const expectChords = (track, em, f) => {
+    let checked = 0;
+    firstNotePerBar(track, project).forEach((note, bar) => {
+      if (note === null) return;
+      checked++;
+      expect([bar, note]).toEqual([bar, bar % 2 === 0 ? em : f]);
+    });
+    expect(checked).toBeGreaterThan(0);
+  };
+
+  it('bass follows Em | F for the whole song', () => expectChords(byName('Bass'), 0, 1));
+  it('pads follow Em | F for the whole song', () => {
+    expectChords(byName('Pad high'), 4, 5);
+    expectChords(byName('Pad low'), 2, 3);
+  });
+  it('lead follows Em | F for the whole song', () => expectChords(byName('Lead'), 4, 5));
+
+  it('uses the 808, a bit of swing, and every sound exists on that machine', () => {
+    expect(project.bank).toBe('tr808');
+    expect(project.swing).toBeGreaterThan(0);
+    // sounds the TR-808 map has (tidal-drum-machines): no rd, no cr in this demo
+    const has808 = ['bd', 'sd', 'cp', 'rim', 'hh', 'oh', 'cb', 'ht', 'mt', 'lt', 'cr', 'perc', 'sh'];
+    for (const t of project.tracks.filter((t) => t.type !== 'synth')) expect(has808).toContain(t.sound);
+  });
+
+  it('every section is an even number of bars (keeps Em on section starts)', () => {
+    const runs = [];
+    project.chain.forEach((p, k) => (k && project.chain[k - 1] === p ? runs[runs.length - 1].n++ : runs.push({ p, n: 1 })));
+    for (const r of runs) expect(r.n % 2).toBe(0);
+  });
+});
