@@ -43,7 +43,7 @@ Local URL: https://offbeat.app.test via `herd proxy offbeat.app http://127.0.0.1
 
 Live at **https://offbeat.kimiyu.ch** (Hostpoint, web root `~/www/offbeat.kimiyu.ch/public`).
 Deploy with `./deploy.sh`: refuses uncommitted changes, runs the tests, builds from HEAD,
-rsyncs `dist/` into the web root (keeps a panel-managed `.htaccess`).
+rsyncs `dist/` into the web root. `public/.htaccess` forces HTTPS and sets caching.
 
 - The site is fully static: no server code, no environment variables.
 - Serve it over **HTTPS**: AudioWorklet (used by Strudel, e.g. the `supersaw` synth) and

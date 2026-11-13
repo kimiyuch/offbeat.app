@@ -4,7 +4,8 @@
 #
 # Offbeat is a static site: it is built locally from HEAD (not from the working tree)
 # and only the build output (dist/) is uploaded into the web root (public/). Nothing
-# runs on the server. A .htaccess placed there by the Hostpoint panel is never touched.
+# runs on the server. The site's .htaccess (HTTPS redirect, caching) comes from
+# public/.htaccess in this repo.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -36,7 +37,6 @@ chmod -R u=rwX,go=rX "$STAGE/dist"
 
 echo "Uploading…"
 rsync -az --delete \
-  --filter 'protect /.htaccess' \
   "$STAGE/dist/" "$HOST:$DEST/"
 
 echo "Deployed $(git rev-parse --short HEAD) to $URL"
